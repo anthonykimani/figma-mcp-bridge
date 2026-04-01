@@ -27,7 +27,7 @@ export class Election {
     const jitter = 3_000 + Math.random() * 2_000;
     this.interval = setInterval(() => {
       this.checkAndUpdateRole().catch((err) => {
-        console.error("Election check error:", err);
+        console.error("[Election] Check error:", err);
       });
     }, jitter);
   }
@@ -44,11 +44,11 @@ export class Election {
       case Role.Follower: {
         const alive = await this.pingLeader();
         if (!alive) {
-          console.error("Leader not responding, attempting takeover...");
+          console.error("[Election] Leader not responding, attempting takeover...");
           try {
             await this.node.becomeLeader();
           } catch (err) {
-            console.error("Failed to become leader:", err);
+            console.error("[Election] Failed to become leader:", err);
           }
         }
         break;

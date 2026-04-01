@@ -7,6 +7,8 @@
 - [Local development](#local-development)
 - [Structure](#structure)
 - [How it works](#how-it-works)
+- [Available MCP Tools](#available-mcp-tools)
+- [Troubleshooting](#troubleshooting)
 
 <br/>
 
@@ -78,6 +80,21 @@ cd plugin && bun install && bun run build
 
 For local development, add the following to your AI tool's MCP config:
 
+**OpenCode (recommended):**
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "figma-bridge": {
+      "type": "local",
+      "command": ["node", "/path/to/figma-mcp-bridge/server/dist/index.js"],
+      "enabled": true
+    }
+  }
+}
+```
+
+**Other AI tools:**
 ```json
 {
   "figma-bridge": {
@@ -86,6 +103,46 @@ For local development, add the following to your AI tool's MCP config:
   }
 }
 ```
+
+#### 5. Running the bridge
+
+```bash
+# Start the bridge server
+cd /path/to/figma-mcp-bridge/server
+node dist/index.js
+```
+
+The bridge will:
+1. Start an MCP server on stdio (for AI tool communication)
+2. Start an HTTP server on port 1994 (for plugin communication)
+3. Print `Leader listening on :1994` when ready
+
+**Verify the bridge is running:**
+
+```bash
+curl http://localhost:1994/ping
+# Should return: {"status":"ok","version":"0.1.1"}
+```
+
+#### 6. Using with Figma Desktop
+
+1. Open Figma Desktop
+2. Open the Figma file you want to analyze
+3. Go to `Plugins > Development` and run "Figma MCP Bridge"
+4. The plugin UI should show "WebSocket Connected"
+5. Select nodes or navigate to the page you want to analyze
+6. Use the MCP tools in your AI tool to query the design
+
+**Architecture overview:**
+
+```
+Figma Desktop → Plugin (WebSocket) → Bridge Server (:1994) → MCP Server (stdio) → AI Tool
+```
+
+The bridge server handles the protocol translation between:
+- Figma's plugin message protocol (via WebSocket)
+- MCP protocol (via stdio)
+
 
 ## Structure
 
@@ -110,7 +167,7 @@ There are two main components to the Figma MCP Bridge:
 
 ### 1. The Figma Plugin
 
-The Figma plugin is the user interface for the Figma MCP Bridge. You run this inside the Figma file you want to use the MCP server for, and its responsible for getting you all the information you need.
+The Figma plugin is the user interface for the Figma MCP Bridge. You run this inside the Figma file you want to use the MCP server for, and it's responsible for getting all the information you need.
 
 ### 2. The MCP Server
 
@@ -119,6 +176,78 @@ The MCP server is the core of the Figma MCP Bridge. As the Figma plugin connects
 - Forwarding tool calls to the Figma plugin
 - Routing responses back to the Figma plugin
 - Handling leader election (as we can have only one WS connection to an MCP server at a time)
+
+## Available MCP Tools
+
+Once connected, you can use these tools in your AI tool:
+
+| Tool | Description |
+|------|-------------|
+| `get_metadata` | Get file info, pages, current page |
+| `get_document` | Get the current page document tree |
+| `get_selection` | Get currently selected nodes |
+| `get_node` | Get a specific node by ID (format: `123:456`) |
+| `get_styles` | Get all local styles (paint, text, effects, grids) |
+| `get_design_context` | Get summarized tree structure of selection/page |
+| `get_variable_defs` | Get all local variable collections and values |
+| `get_screenshot` | Export screenshot (returns base64) |
+| `save_screenshots` | Export and save screenshots to filesystem |
+
+### Example usage:
+
+```
+Get the metadata for the current Figma file
+
+Get the design context for the Explore & Discover Crypto frame (node 18319:27856)
+
+Take a screenshot of the selected nodes at 2x scale
+```
+
+## Troubleshooting
+
+### "Not connected" error in AI tool
+
+If MCP tools return "Not connected":
+
+1. **Check if the bridge server is running:**
+   ```bash
+   curl http://localhost:1994/ping
+   # Should return: {"status":"ok","version":"0.1.1"}
+   ```
+
+2. **Check if the Figma plugin is connected:**
+   - Look at the plugin UI in Figma
+   - It should show "WebSocket Connected" status
+   - If not, close and reopen the plugin
+
+3. **Check for multiple bridge processes:**
+   ```bash
+   lsof -i :1994
+   # Kill any stale processes and restart
+   ```
+
+4. **Restart the bridge:**
+   ```bash
+   # Kill existing process
+   pkill -f "node.*figma-mcp-bridge"
+   
+   # Start fresh
+   cd /path/to/figma-mcp-bridge/server
+   node dist/index.js
+   ```
+
+### RPC requests time out
+
+This usually means the Figma plugin isn't connected. Check:
+- Plugin UI shows "WebSocket Connected"
+- Figma file is open and plugin is running
+
+### Plugin shows "Connected" but tools don't work
+
+The WebSocket connection to the bridge may be stale. Try:
+1. Close the plugin in Figma
+2. Stop the bridge server (`pkill -f "node.*figma-mcp-bridge"`)
+3. Restart both
 
 
 ```

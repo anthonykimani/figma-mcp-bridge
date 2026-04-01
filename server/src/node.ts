@@ -59,7 +59,7 @@ export class Node {
 
     this.leader = leader;
     this._role = Role.Leader;
-    console.error("Became LEADER");
+    console.error("[Node] Became LEADER");
   }
 
   becomeFollower(): void {
@@ -71,7 +71,7 @@ export class Node {
     }
 
     this._role = Role.Follower;
-    console.error("Became FOLLOWER");
+    console.error("[Node] Became FOLLOWER");
   }
 
   stop(): void {
