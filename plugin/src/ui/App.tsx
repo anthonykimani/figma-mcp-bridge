@@ -32,6 +32,17 @@ type PluginResponse = {
 type PluginStatus = {
   fileName: string;
   selectionCount: number;
+  selectionIds?: string[];
+  selectionNames?: string[];
+};
+
+type SerializedNode = {
+  id: string;
+  name: string;
+  type: string;
+  bounds?: { x: number; y: number; width: number; height: number };
+  characters?: string;
+  children?: SerializedNode[];
 };
 
 const WS_URL = "ws://localhost:1994/ws";
@@ -42,6 +53,7 @@ export default function App() {
     fileName: "Unknown file",
     selectionCount: 0
   });
+  const [selectedNodes, setSelectedNodes] = useState<SerializedNode[]>([]);
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<number | null>(null);
 
@@ -57,24 +69,35 @@ export default function App() {
 
       if (msg.type === "plugin-status") {
         setStatus(msg.payload);
+        const names = msg.payload.selectionNames;
+        const ids = msg.payload.selectionIds;
+        if (names && ids) {
+          // Build nodes from the status message directly
+          const nodes: SerializedNode[] = names.map((name: string, i: number) => ({
+            id: ids[i],
+            name: name,
+            type: "NODE"
+          }));
+          setSelectedNodes(nodes);
+        }
         return;
       }
-
-      if (!("requestId" in msg)) {
-        return;
-      }
-
-      if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-        return;
-      }
-      socketRef.current.send(JSON.stringify(msg));
     };
 
     window.addEventListener("message", handleMessage);
-    return () => {
-      window.removeEventListener("message", handleMessage);
-    };
+    return () => window.removeEventListener("message", handleMessage);
   }, []);
+
+  const handleNodeClick = (nodeId: string) => {
+    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
+    
+    const requestId = `req-${Date.now()}`;
+    socketRef.current.send(JSON.stringify({
+      type: "get_node",
+      requestId,
+      nodeIds: [nodeId]
+    }));
+  };
 
   useEffect(() => {
     const connect = () => {
@@ -105,7 +128,33 @@ export default function App() {
       };
 
       ws.onmessage = (event) => {
-        const payload = JSON.parse(event.data) as ServerRequest;
+        const payload = JSON.parse(event.data);
+        
+        // Auto-fetch selected nodes when selection changes
+        if (payload.type === "plugin-status" && payload.payload?.selectionCount > 0) {
+          setStatus(payload.payload);
+          const nodeIds = payload.payload.selectionIds;
+          if (nodeIds && nodeIds.length > 0 && socketRef.current?.readyState === WebSocket.OPEN) {
+            socketRef.current.send(JSON.stringify({
+              type: "get_selection",
+              requestId: `req-${Date.now()}`
+            }));
+          }
+        }
+        
+        if (payload.type === "get_selection" && payload.data) {
+          setSelectedNodes(payload.data as SerializedNode[]);
+        }
+        
+        if (payload.type === "get_node" && payload.data) {
+          setSelectedNodes(prev => {
+            const node = payload.data as SerializedNode;
+            const exists = prev.find(n => n.id === node.id);
+            if (exists) return prev;
+            return [...prev, node];
+          });
+        }
+        
         parent.postMessage({ pluginMessage: { type: "server-request", payload } }, "*");
       };
     };
@@ -135,6 +184,12 @@ export default function App() {
           <span className="info-label">Selection:</span>
           <span className="info-value">{status.selectionCount} node(s)</span>
         </div>
+        {selectedNodes.length > 0 && (
+          <div className="info-row">
+            <span className="info-label">Node:</span>
+            <span className="info-value">{selectedNodes[0].name} {selectedNodes[0].id}</span>
+          </div>
+        )}
       </div>
 
       <div className="footer">

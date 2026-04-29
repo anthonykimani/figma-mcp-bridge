@@ -34,6 +34,8 @@ const sendStatus = () => {
     payload: {
       fileName: figma.root.name,
       selectionCount: figma.currentPage.selection.length,
+      selectionIds: figma.currentPage.selection.map(s => s.id),
+      selectionNames: figma.currentPage.selection.map(s => s.name),
     },
   });
 };
