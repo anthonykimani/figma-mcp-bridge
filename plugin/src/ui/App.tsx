@@ -82,6 +82,11 @@ export default function App() {
         }
         return;
       }
+
+      // Forward plugin responses back over WebSocket to the server
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        socketRef.current.send(JSON.stringify(msg));
+      }
     };
 
     window.addEventListener("message", handleMessage);
